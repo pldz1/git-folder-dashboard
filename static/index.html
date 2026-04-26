@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Local Git Manager</title>
+    <link rel="stylesheet" href="/static/style.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <span class="eyebrow">Windows Local Tool</span>
+          <h1>Local Git Manager</h1>
+          <p>扫描本地工作区，集中查看仓库状态并执行常用 Git 操作。</p>
+        </div>
+        <div class="hero-stats" aria-label="扫描统计">
+          <div class="stat-tile">
+            <span id="repoCount" class="stat-value">0</span>
+            <span class="stat-label">Git 仓库</span>
+          </div>
+          <div class="stat-tile">
+            <span id="nonGitCount" class="stat-value">0</span>
+            <span class="stat-label">非 Git 目录</span>
+          </div>
+        </div>
+      </header>
+
+      <section class="scan-panel">
+        <div class="section-title">
+          <div>
+            <h2>工作区路径</h2>
+            <p>只扫描该目录下的一级子文件夹</p>
+          </div>
+        </div>
+        <div class="scan-row">
+          <label class="path-field" for="pathInput">
+            <span>父文件夹</span>
+            <input id="pathInput" type="text" placeholder="D:\workspace" autocomplete="off">
+          </label>
+          <button id="selectButton" class="secondary" type="button">选择</button>
+          <button id="scanButton" class="primary" type="button">扫描</button>
+        </div>
+        <div id="errorBox" class="error-box" hidden></div>
+      </section>
+
+      <section class="content-grid">
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>仓库</h2>
+              <p>状态、分支和同步信息</p>
+            </div>
+          </div>
+          <div id="repoList" class="repo-list empty">尚未扫描</div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>非 Git 目录</h2>
+              <p>扫描到但未识别为仓库</p>
+            </div>
+          </div>
+          <div id="nonGitList" class="non-git-list empty">尚未扫描</div>
+        </div>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
