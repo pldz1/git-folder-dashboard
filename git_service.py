@@ -51,6 +51,8 @@ def get_repo_status(repo_id: str, repo_path: Path) -> dict:
         "name": repo_path.name,
         "path": str(repo_path),
         "branch": "",
+        "local_branches": [],
+        "remote_branches": [],
         "dirty": False,
         "untracked": False,
         "has_remote": False,
@@ -70,6 +72,28 @@ def get_repo_status(repo_id: str, repo_path: Path) -> dict:
         base["branch"] = branch_result["stdout"].strip() or "(detached)"
     else:
         base["branch"] = "(unknown)"
+
+    local_branches_result = run_git(
+        repo_path,
+        ["for-each-ref", "--format=%(refname:short)", "refs/heads"],
+    )
+    if local_branches_result["success"]:
+        base["local_branches"] = [
+            branch.strip()
+            for branch in local_branches_result["stdout"].splitlines()
+            if branch.strip()
+        ]
+
+    remote_branches_result = run_git(
+        repo_path,
+        ["for-each-ref", "--format=%(refname:short)", "refs/remotes"],
+    )
+    if remote_branches_result["success"]:
+        base["remote_branches"] = [
+            branch.strip()
+            for branch in remote_branches_result["stdout"].splitlines()
+            if branch.strip() and "/" in branch.strip() and not branch.strip().endswith("/HEAD")
+        ]
 
     lines = [line for line in status_result["stdout"].splitlines() if line]
     base["dirty"] = len(lines) > 0
@@ -141,3 +165,45 @@ def commit_repo(repo_path: Path, message: str) -> dict:
         return add_result
 
     return run_git(repo_path, ["commit", "-m", message])
+
+
+def checkout_repo(repo_path: Path, branch: str) -> dict:
+    branch = branch.strip()
+    if not branch:
+        return {
+            "success": False,
+            "stdout": "",
+            "stderr": "Branch name is required.",
+            "returncode": 1,
+        }
+
+    local_branches_result = run_git(
+        repo_path,
+        ["for-each-ref", "--format=%(refname:short)", "refs/heads"],
+    )
+    local_branches = {
+        item.strip()
+        for item in local_branches_result["stdout"].splitlines()
+        if item.strip()
+    } if local_branches_result["success"] else set()
+
+    if branch in local_branches:
+        return run_git(repo_path, ["checkout", branch])
+
+    remote_branches_result = run_git(
+        repo_path,
+        ["for-each-ref", "--format=%(refname:short)", "refs/remotes"],
+    )
+    remote_branches = {
+        item.strip()
+        for item in remote_branches_result["stdout"].splitlines()
+        if item.strip() and "/" in item.strip() and not item.strip().endswith("/HEAD")
+    } if remote_branches_result["success"] else set()
+
+    if branch in remote_branches:
+        local_name = branch.split("/", 1)[1]
+        if local_name in local_branches:
+            return run_git(repo_path, ["checkout", local_name])
+        return run_git(repo_path, ["checkout", "--track", branch])
+
+    return run_git(repo_path, ["checkout", branch])

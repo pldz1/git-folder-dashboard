@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from git_service import commit_repo, get_repo_status, run_git
+from git_service import checkout_repo, commit_repo, get_repo_status, run_git
 from repo_store import RepoStore
 
 
@@ -28,6 +28,10 @@ class ScanRequest(BaseModel):
 
 class CommitRequest(BaseModel):
     message: str
+
+
+class CheckoutRequest(BaseModel):
+    branch: str
 
 
 def resource_path(relative_path: str) -> Path:
@@ -139,6 +143,14 @@ def push(repo_id: str):
 def commit(repo_id: str, request: CommitRequest):
     repo_path = require_repo(repo_id)
     result = commit_repo(repo_path, request.message)
+    repo = refresh_repo(repo_id)
+    return {"success": result["success"], "result": result, "repo": repo}
+
+
+@app.post("/api/repos/{repo_id}/checkout")
+def checkout(repo_id: str, request: CheckoutRequest):
+    repo_path = require_repo(repo_id)
+    result = checkout_repo(repo_path, request.branch)
     repo = refresh_repo(repo_id)
     return {"success": result["success"], "result": result, "repo": repo}
 
