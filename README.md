@@ -1,33 +1,72 @@
-# Local Git Manager
+# Git Folder Dashboard
 
-本地 Git 仓库仪表盘。启动后提供一个本地 Web UI，用于扫描工作区目录下的一级子目录，集中查看多个 Git 仓库的状态、分支和同步信息，并执行常用 Git 操作。
+一个本地运行的 Git 仓库管理面板。
 
-## 特性
+给定一个父目录，自动扫描其一级子目录中的 Git 仓库，并通过 Web 页面统一查看状态、文件改动，并执行常见操作。
 
-- 扫描指定父目录下的一级子目录
-- 识别包含 `.git` 的 Git 仓库，并列出非 Git 目录
-- 显示当前分支、本地分支、远端分支、dirty、untracked、ahead、behind、upstream 状态
-- 仓库卡片默认折叠，展开后显示详细指标、分支列表和操作区
-- 支持点击分支执行 `git checkout`
-- 支持 `fetch`、`pull`、`push`
-- 支持 `git add .` + `git commit -m "<message>"`
-- 支持 light / dark 主题切换，并保存主题偏好
-- 操作后自动刷新仓库状态
+定位：多仓库总览工具，而不是 IDE 替代品。
 
-## 界面结构
+---
 
-- `Dashboard`：总览视图，包含扫描区、状态统计、仓库列表和非 Git 目录
-- `Repositories`：所有 Git 仓库列表
-- `Branches`：只显示存在多个本地或远端分支的仓库
-- `Sync Status`：只显示需要关注的仓库，例如 dirty、ahead、behind、diverged、no remote 或 error
-- `Local Dirs`：只显示扫描到的非 Git 目录
+## 功能概览
 
-仓库卡片在折叠状态下显示关键信息：仓库名、路径、当前分支、同步状态、工作区状态、分支数量和 untracked 状态。展开后可以查看完整分支列表、详细指标，并执行 Git 操作。
+适用于类似结构：
+
+```text
+~/Code
+  project-a
+  project-b
+  project-c
+  notes
+```
+
+提供能力：
+
+- 扫描目录，识别 Git 仓库
+- 展示当前分支、同步状态（ahead / behind）
+- 展示工作区改动（staged / unstaged / untracked）
+- 查看文件 diff 或内容
+- 执行常见操作：
+
+  - fetch / pull / push
+  - commit / checkout
+
+- 文件级操作：
+
+  - 暂存 / 撤回暂存
+  - 丢弃改动
+  - 删除 / 忽略未跟踪文件
+
+---
+
+## 架构
+
+整体结构保持简单：
+
+- 后端（Python / FastAPI）：执行 Git 命令、访问文件系统、返回 JSON
+- 前端（原生 HTML / JS）：渲染 UI、管理状态、处理交互
+- 内存存储：维护 `repo_id -> path` 映射
+
+数据流：
+
+```text
+浏览器
+  ↓
+static (HTML / JS)
+  ↓
+FastAPI (app.py)
+  ↓
+git_service.py
+  ↓
+Git + 文件系统
+```
+
+---
 
 ## 项目结构
 
 ```text
-local-git-manager/
+git-folder-dashboard/
   app.py
   git_service.py
   repo_store.py
@@ -35,48 +74,217 @@ local-git-manager/
     index.html
     style.css
     app.js
-  requirements.txt
-  README.md
 ```
 
-## 安装
+职责划分：
 
-创建虚拟环境：
+- `app.py`
 
-```bash
-python -m venv .venv
+  - 路由定义
+  - 参数校验
+  - 调用服务层
+  - 返回响应
+
+- `git_service.py`
+
+  - 所有 Git 操作
+  - 状态解析
+  - 文件操作实现
+
+- `repo_store.py`
+
+  - 内存映射：`repo_id -> path`
+
+- `static/`
+
+  - 前端 UI 与交互逻辑
+
+---
+
+## 后端职责
+
+仅处理三类逻辑：
+
+1. 接收请求
+2. 执行 Git / 文件操作
+3. 返回 JSON
+
+不包含：
+
+- 模板渲染
+- 持久化存储
+- 前端状态管理
+
+---
+
+## 核心模块说明
+
+### git_service.py
+
+核心业务逻辑所在。
+
+#### Git 执行入口
+
+```text
+run_git(repo_path, args)
 ```
 
-Windows PowerShell 激活：
+统一执行所有 Git 命令并返回标准结构结果。
 
-```powershell
-.\.venv\Scripts\Activate.ps1
+---
+
+#### 仓库状态
+
+```text
+get_repo_status(repo_id, repo_path)
 ```
 
-Windows CMD 激活：
+返回信息包括：
 
-```cmd
-.venv\Scripts\activate.bat
+- 当前分支
+- 分支列表（本地 / 远端）
+- 文件改动（staged / unstaged / untracked）
+- 是否 dirty
+- ahead / behind
+- 仓库状态（clean / dirty / diverged 等）
+
+---
+
+#### 文件操作
+
+统一入口：
+
+```text
+apply_file_action()
 ```
 
-Linux / macOS 激活：
+支持：
 
-```bash
-source .venv/bin/activate
+- stage → `git add`
+- unstage → `git restore --staged`
+- discard → `git restore`
+- delete → 删除文件
+- ignore → 写入 `.git/info/exclude`
+
+---
+
+### repo_store.py
+
+维护仓库映射关系：
+
+```text
+repo_id → 本地路径
 ```
 
-安装依赖：
+特点：
 
-```bash
-python -m pip install -r requirements.txt
+- 纯内存存储
+- 不持久化
+- 服务重启后需重新扫描
+
+---
+
+### app.py
+
+负责请求调度：
+
+```text
+请求 → 路由 → service → refresh → 返回
 ```
 
-如果 PowerShell 阻止脚本执行，可以在当前窗口临时放开：
+关键流程：
 
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\.venv\Scripts\Activate.ps1
+- 根据 `repo_id` 获取路径
+- 调用对应 Git 操作
+- 刷新仓库状态
+- 返回最新数据
+
+---
+
+## 前端说明
+
+无框架实现，基于单一状态驱动渲染。
+
+核心状态：
+
+```text
+state = {
+  repos,
+  activeRepoId,
+  theme,
+  preview,
+  ...
+}
 ```
+
+职责：
+
+- 渲染仓库列表与详情
+- 管理 UI 状态（tab / 展开 / 主题）
+- 调用 API
+- 根据返回结果重新渲染
+
+---
+
+### 文件树渲染
+
+后端返回扁平路径列表：
+
+```text
+a/b/c.txt
+```
+
+前端负责：
+
+1. 拆分路径
+2. 构建树结构
+3. 渲染节点
+
+优点：
+
+- 后端保持简单
+- UI 可自由调整
+
+---
+
+## 典型流程
+
+以“暂存文件”为例：
+
+```text
+点击按钮
+  ↓
+前端请求 /files/action
+  ↓
+app.py 路由
+  ↓
+apply_file_action()
+  ↓
+git add
+  ↓
+refresh_repo()
+  ↓
+get_repo_status()
+  ↓
+返回结果
+  ↓
+前端重新渲染
+```
+
+---
+
+## 配置
+
+`.env`：
+
+```env
+LOCAL_GIT_MANAGER_HOST=127.0.0.1
+LOCAL_GIT_MANAGER_PORT=8765
+LOCAL_GIT_MANAGER_DEFAULT_WORKSPACE=~/Code
+LOCAL_GIT_MANAGER_NO_BROWSER=0
+```
+
+---
 
 ## 启动
 
@@ -90,149 +298,263 @@ python app.py
 http://127.0.0.1:8765
 ```
 
-默认会自动打开浏览器。若不想自动打开浏览器：
-
-Windows CMD：
-
-```cmd
-set LOCAL_GIT_MANAGER_NO_BROWSER=1
-python app.py
-```
-
-PowerShell：
-
-```powershell
-$env:LOCAL_GIT_MANAGER_NO_BROWSER="1"
-python app.py
-```
-
-Linux / macOS：
-
-```bash
-LOCAL_GIT_MANAGER_NO_BROWSER=1 python app.py
-```
-
-## Git 操作说明
-
-### Checkout
-
-展开仓库卡片后，可以点击分支 chip 执行 checkout。
-
-- 本地分支：执行 `git checkout <branch>`
-- 远端分支：优先创建 tracking branch，执行 `git checkout --track <remote>/<branch>`
-- 如果本地已存在同名分支，会切换到本地分支
-- 如果工作区有本地修改，前端会先提示确认
-
-### Commit
-
-提交操作会执行：
-
-```bash
-git add .
-git commit -m "<message>"
-```
-
-### Fetch / Pull / Push
-
-操作对应标准 Git 命令：
-
-```bash
-git fetch
-git pull
-git push
-```
+---
 
 ## API
 
-### `POST /api/scan`
+### 配置
 
-请求：
+- `GET /api/config`
 
-```json
-{
-  "path": "D:\\workspace"
-}
+### 工作区
+
+- `POST /api/select-folder`
+- `POST /api/scan`
+
+### 仓库操作
+
+- `POST /api/repos/{id}/refresh`
+- `POST /api/repos/{id}/fetch`
+- `POST /api/repos/{id}/pull`
+- `POST /api/repos/{id}/push`
+- `POST /api/repos/{id}/commit`
+- `POST /api/repos/{id}/checkout`
+- `POST /api/repos/{id}/discard`
+
+### 文件操作
+
+- `POST /api/repos/{id}/files/preview`
+- `POST /api/repos/{id}/files/action`
+- `POST /api/repos/{id}/files/bulk-action`
+
+---
+
+## 核心调用链
+
+后端的主要调用关系可以简化为：
+
+```text
+浏览器请求
+  → app.py 路由
+    → require_repo()
+    → git_service.*()
+    → refresh_repo()
+      → get_repo_status()
+    → 返回 JSON
 ```
 
-响应：
+职责划分很明确：
 
-```json
-{
-  "success": true,
-  "repos": [],
-  "non_git_dirs": []
-}
+- `app.py`：决定调用哪个动作
+- `git_service.py`：负责具体执行
+- `get_repo_status()`：负责生成最终展示数据
+
+---
+
+## 扫描流程
+
+```text
+POST /api/scan
+  → app.py.scan()
+    → repo_store.clear()
+    → repo_store.add()
+    → get_repo_status()
+    → repo_store.update()
 ```
 
-### `POST /api/select-folder`
+输出：
 
-打开系统文件夹选择框，返回用户选择的本地路径。
+- 仓库列表
+- 非 Git 目录列表
 
-### `GET /api/repos`
+---
 
-返回当前已扫描的仓库列表。
+## 文件操作链路
 
-### `POST /api/repos/{id}/refresh`
-
-刷新指定仓库状态。
-
-### `POST /api/repos/{id}/fetch`
-
-执行 `git fetch`。
-
-### `POST /api/repos/{id}/pull`
-
-执行 `git pull`。
-
-### `POST /api/repos/{id}/push`
-
-执行 `git push`。
-
-### `POST /api/repos/{id}/commit`
-
-请求：
-
-```json
-{
-  "message": "commit message"
-}
+```text
+POST /files/action
+  → app.py.file_action()
+    → apply_file_action()
+      → stage_file()
+      → unstage_file()
+      → discard_file()
+      → ...
+    → refresh_repo()
+      → get_repo_status()
 ```
 
-执行：
+关键点：
 
-```bash
-git add .
-git commit -m "commit message"
+- 所有文件操作统一从 `apply_file_action()` 进入
+- 操作完成后强制刷新状态，保证前端一致性
+
+---
+
+## 预览链路
+
+```text
+POST /files/preview
+  → app.py.file_preview()
+    → preview_repo_file()
+      → git diff
+      → git diff --cached
+      → read file
 ```
 
-### `POST /api/repos/{id}/checkout`
+根据文件状态决定预览方式：
 
-请求：
+- staged → `git diff --cached`
+- unstaged → `git diff`
+- untracked → 直接读取文件
 
-```json
-{
-  "branch": "main"
-}
+---
+
+## 仓库操作链路
+
+```text
+POST /repos/{id}/push
+  → app.py.repo_action()
+    → run_git(["push"])
+    → refresh_repo()
 ```
 
-执行本地或远端分支 checkout，并刷新仓库状态。
+其他操作类似：
 
-## 仓库状态
-
-- `clean`：无修改，已同步
-- `dirty`：有未提交或未跟踪文件
-- `ahead`：本地领先 upstream
-- `behind`：本地落后 upstream
-- `diverged`：本地和 upstream 都有新提交
-- `no_remote`：没有 upstream
-- `error`：Git 命令执行失败
-
-## 打包
-
-Windows 下执行：
-
-```bash
-pyinstaller --onefile --add-data "static;static" app.py
+```text
+fetch / pull / checkout / commit
+  → 对应 git_service 函数
+  → refresh_repo()
 ```
 
-生成的 exe 在 `dist/` 目录中。
+---
+
+## 前端调用链
+
+```text
+scan()
+previewFile()
+runRepoAction()
+runFileAction()
+  → requestJson()
+    → 调用后端 API
+  → 更新 state
+  → render()
+```
+
+渲染拆分：
+
+```text
+render()
+  → renderTabs()
+  → renderSidebar()
+  → renderRepoDetail()
+  → renderNonGit()
+```
+
+---
+
+## 一个完整操作路径（示例）
+
+```text
+点击「暂存文件」
+  → runFileAction()
+  → POST /files/action
+  → apply_file_action()
+  → git add
+  → refresh_repo()
+  → get_repo_status()
+  → 返回最新状态
+  → render()
+```
+
+---
+
+## 关键函数分层
+
+### 调度层（app.py）
+
+```text
+require_repo()
+refresh_repo()
+各类 /api 路由
+```
+
+---
+
+### 核心逻辑（git_service.py）
+
+```text
+run_git()
+get_repo_status()
+commit_repo()
+checkout_repo()
+discard_repo_changes()
+```
+
+---
+
+### 文件操作
+
+```text
+apply_file_action()
+apply_bulk_file_action()
+
+stage_file()
+unstage_file()
+discard_file()
+delete_untracked_file()
+ignore_untracked_file()
+```
+
+---
+
+### 状态解析
+
+```text
+parse_porcelain_line()
+normalize_status()
+build_file_entry()
+```
+
+---
+
+## 一句话总结结构
+
+```text
+app.py 负责“调度”
+git_service.py 负责“执行”
+get_repo_status() 负责“生成视图数据”
+前端负责“渲染”
+```
+
+---
+
+## 仓库状态说明
+
+- `clean`：无改动
+- `dirty`：存在未提交改动
+- `ahead`：本地领先远端
+- `behind`：落后远端
+- `diverged`：分叉
+- `no_remote`：无 upstream
+- `error`：状态获取失败
+
+---
+
+## 限制
+
+- 仅扫描一级子目录
+- 不持久化仓库数据
+- commit 为统一提交（`git add .`）
+- 无权限控制（本地使用场景）
+
+---
+
+## 阅读顺序建议
+
+- 后端入口：`app.py`
+- 核心逻辑：`git_service.py`
+- 数据映射：`repo_store.py`
+- 前端实现：`static/app.js`
+
+---

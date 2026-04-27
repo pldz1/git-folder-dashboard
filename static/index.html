@@ -1,99 +1,119 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="zh-CN" data-theme="light">
   <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Local Git Manager</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Git Folder Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css" />
   </head>
   <body>
-    <header class="topbar">
-      <div class="brand">
-        <span class="brand-icon">⌁</span>
-        <span class="brand-strong">GIT</span>
-        <span class="brand-light">FOLDER MANAGER</span>
-      </div>
-      <div class="topbar-actions">
-        <button id="themeButton" class="icon-button" type="button" aria-label="切换夜间模式">☾</button>
-        <div class="topbar-status" aria-label="扫描统计">
-          <span class="run-dot"></span>
-          <span><strong id="repoCount">0</strong> REPOS · <strong id="nonGitCount">0</strong> DIRS</span>
-        </div>
-      </div>
-    </header>
+    <div class="app-layout">
+      <aside class="rail" aria-label="应用导航">
+        <button
+          class="rail-button nav-home active"
+          type="button"
+          data-tab="dashboard"
+          aria-label="总览"
+          title="总览"
+          data-tip="总览"
+        ></button>
+        <button
+          class="rail-button nav-multi"
+          type="button"
+          data-tab="repositories"
+          aria-label="仓库"
+          title="仓库"
+          data-tip="仓库"
+        ></button>
+        <button
+          class="rail-button nav-frok"
+          type="button"
+          data-tab="branches"
+          aria-label="分支"
+          title="分支"
+          data-tip="分支"
+        ></button>
+        <button
+          class="rail-button nav-sync"
+          type="button"
+          data-tab="sync"
+          aria-label="同步"
+          title="同步"
+          data-tip="同步"
+        ></button>
+        <button
+          class="rail-button nav-db"
+          type="button"
+          data-tab="local"
+          aria-label="本地目录"
+          title="本地目录"
+          data-tip="本地目录"
+        ></button>
+        <button
+          id="themeButton"
+          class="rail-button rail-bottom theme-toggle"
+          type="button"
+          aria-label="切到夜里"
+          title="切换主题"
+          data-tip="切换主题"
+        ></button>
+      </aside>
 
-    <nav class="tabs" aria-label="主导航">
-      <button class="tab active" type="button" data-tab="dashboard">DASHBOARD</button>
-      <button class="tab" type="button" data-tab="repositories">REPOSITORIES</button>
-      <button class="tab" type="button" data-tab="branches">BRANCHES</button>
-      <button class="tab" type="button" data-tab="sync">SYNC STATUS</button>
-      <button class="tab" type="button" data-tab="local">LOCAL DIRS</button>
-    </nav>
-
-    <main class="app-shell">
-      <section class="scan-panel" data-panel="dashboard repositories branches sync local">
-        <div class="section-title">
-          <div>
-            <h2>WORKSPACE SCAN</h2>
-            <p>扫描该目录下的一级子文件夹，读取 Git 状态和分支信息。</p>
+      <aside class="sidebar">
+        <section class="workspace-card">
+          <div class="sidebar-title">工作区</div>
+          <div class="workspace-path-row">
+            <span class="folder-icon"></span>
+            <input
+              id="pathInput"
+              type="text"
+              placeholder="比如 ~/Code"
+              autocomplete="off"
+            />
           </div>
-        </div>
-        <div class="scan-row">
-          <label class="path-field" for="pathInput">
-            <span>PARENT FOLDER</span>
-            <input id="pathInput" type="text" placeholder="D:\workspace" autocomplete="off">
-          </label>
-          <button id="selectButton" class="secondary" type="button">选择</button>
-          <button id="scanButton" class="primary" type="button">扫描</button>
-        </div>
-        <div id="errorBox" class="error-box" hidden></div>
-      </section>
-
-      <section class="summary-grid" data-panel="dashboard repositories branches sync">
-        <div class="summary-tile">
-          <span class="summary-label">CLEAN</span>
-          <strong id="cleanCount">0</strong>
-        </div>
-        <div class="summary-tile">
-          <span class="summary-label">CHANGED</span>
-          <strong id="changedCount">0</strong>
-        </div>
-        <div class="summary-tile">
-          <span class="summary-label">AHEAD</span>
-          <strong id="aheadCount">0</strong>
-        </div>
-        <div class="summary-tile">
-          <span class="summary-label">BEHIND</span>
-          <strong id="behindCount">0</strong>
-        </div>
-        <div class="summary-tile">
-          <span class="summary-label">NO REMOTE</span>
-          <strong id="noRemoteCount">0</strong>
-        </div>
-      </section>
-
-      <section class="content-stack">
-        <div class="panel repo-panel" data-panel="dashboard repositories branches sync">
-          <div class="panel-header">
-            <div>
-              <h2 id="repoPanelTitle">REPOSITORY STATUS</h2>
-              <p id="repoPanelDescription">当前分支、全部分支、同步差异和工作区状态。</p>
-            </div>
+          <div class="scan-actions">
+            <button id="selectButton" class="secondary" type="button">
+              选择
+            </button>
+            <button id="scanButton" class="primary" type="button">扫描</button>
           </div>
-          <div id="repoList" class="repo-list empty">尚未扫描</div>
+          <div id="errorBox" class="error-box" hidden></div>
+        </section>
+
+        <div class="filter-wrap">
+          <span class="search-icon"></span>
+          <input
+            id="filterInput"
+            type="search"
+            placeholder="筛选仓库"
+            autocomplete="off"
+          />
         </div>
 
-        <div class="panel" data-panel="dashboard local">
+        <div class="repo-section-label">仓库</div>
+        <div id="sidebarRepoList" class="sidebar-repo-list empty">尚未扫描</div>
+
+        <button id="addRepositoryButton" class="add-repo" type="button">
+          添加仓库
+        </button>
+      </aside>
+
+      <main class="detail">
+        <section
+          id="repoDetail"
+          class="detail-stack"
+          data-panel="dashboard repositories branches sync"
+        ></section>
+
+        <section class="panel" data-panel="local">
           <div class="panel-header">
-            <div>
-              <h2>NON GIT DIRS</h2>
-              <p>扫描到但未识别为仓库。</p>
-            </div>
+            <h2>非 Git 目录</h2>
+            <p>扫完以后，这里会放那些还没初始化成 Git 仓库的目录。</p>
           </div>
           <div id="nonGitList" class="non-git-list empty">尚未扫描</div>
-        </div>
-      </section>
-    </main>
+        </section>
+      </main>
+    </div>
 
     <script src="/static/app.js"></script>
   </body>
