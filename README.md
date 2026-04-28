@@ -8,6 +8,8 @@ Given a parent directory, it automatically scans first-level subdirectories for 
 
 **Positioning:** A multi-repository overview tool, not an IDE replacement.
 
+![v1.0.0 preview](./doc/preview.gif)
+
 ---
 
 ## Overview
@@ -361,28 +363,28 @@ Configured via command-line arguments. No `.env` required.
 
 Common commands:
 
-| Scenario | Command |
-| --- | --- |
-| Start with defaults | `python app.py` |
+| Scenario                          | Command                                                                              |
+| --------------------------------- | ------------------------------------------------------------------------------------ |
+| Start with defaults               | `python app.py`                                                                      |
 | Custom host / port / default path | `python app.py --host 127.0.0.1 --port 8080 --default-path ~/Code --no-browser=true` |
-| Mount under a subpath | `python app.py --host 0.0.0.0 --port 8765 --base-path /git` |
+| Mount under a subpath             | `python app.py --host 0.0.0.0 --port 8765 --base-path /git`                          |
 
 Arguments:
 
-| Argument | Description | Default |
-| --- | --- | --- |
-| `--host` | Bind address | `127.0.0.1` |
-| `--port` | Port | `8765` |
-| `--default-path` | Default workspace path | `""` |
-| `--base-path` | URL prefix for subpath hosting, such as `/git` | `""` |
-| `--no-browser` | Disable auto browser open, supports `true/false` | `false` |
+| Argument         | Description                                      | Default     |
+| ---------------- | ------------------------------------------------ | ----------- |
+| `--host`         | Bind address                                     | `127.0.0.1` |
+| `--port`         | Port                                             | `8765`      |
+| `--default-path` | Default workspace path                           | `""`        |
+| `--base-path`    | URL prefix for subpath hosting, such as `/git`   | `""`        |
+| `--no-browser`   | Disable auto browser open, supports `true/false` | `false`     |
 
 Aliases:
 
-| Alias | Equivalent |
-| --- | --- |
+| Alias           | Equivalent       |
+| --------------- | ---------------- |
 | `--defaut-path` | `--default-path` |
-| `--no-brower` | `--no-browser` |
+| `--no-brower`   | `--no-browser`   |
 
 Default URL:
 
