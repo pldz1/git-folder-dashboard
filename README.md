@@ -8,7 +8,7 @@ Given a parent directory, it automatically scans first-level subdirectories for 
 
 **Positioning:** A multi-repository overview tool, not an IDE replacement.
 
-![v1.0.0 preview](./doc/preview.gif)
+![v1.0.0 preview](https://pldz1.com/api/v1/website/image/live-demo/git-folder-dashboard.gif@raw)
 
 ---
 
