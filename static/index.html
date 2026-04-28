@@ -1,81 +1,106 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-theme="light">
+<html lang="en" data-theme="light">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Git Folder Dashboard</title>
-    <link rel="stylesheet" href="/static/style.css" />
+    <title data-i18n="app.title">Git Folder Dashboard</title>
+    <link rel="stylesheet" href="{{ style_url }}" />
   </head>
   <body>
     <div class="app-layout">
-      <aside class="rail" aria-label="应用导航">
+      <aside class="rail" aria-label="App navigation" data-i18n-aria-label="rail.ariaLabel">
         <button
           class="rail-button nav-home active"
           type="button"
           data-tab="dashboard"
-          aria-label="总览"
-          title="总览"
-          data-tip="总览"
+          aria-label="Overview"
+          title="Overview"
+          data-tip="Overview"
+          data-i18n-aria-label="tabs.dashboard"
+          data-i18n-title="tabs.dashboard"
+          data-i18n-tip="tabs.dashboard"
         ></button>
         <button
           class="rail-button nav-multi"
           type="button"
           data-tab="repositories"
-          aria-label="仓库"
-          title="仓库"
-          data-tip="仓库"
+          aria-label="Repositories"
+          title="Repositories"
+          data-tip="Repositories"
+          data-i18n-aria-label="tabs.repositories"
+          data-i18n-title="tabs.repositories"
+          data-i18n-tip="tabs.repositories"
         ></button>
         <button
           class="rail-button nav-frok"
           type="button"
           data-tab="branches"
-          aria-label="分支"
-          title="分支"
-          data-tip="分支"
+          aria-label="Branches"
+          title="Branches"
+          data-tip="Branches"
+          data-i18n-aria-label="tabs.branches"
+          data-i18n-title="tabs.branches"
+          data-i18n-tip="tabs.branches"
         ></button>
         <button
           class="rail-button nav-sync"
           type="button"
           data-tab="sync"
-          aria-label="同步"
-          title="同步"
-          data-tip="同步"
+          aria-label="Sync"
+          title="Sync"
+          data-tip="Sync"
+          data-i18n-aria-label="tabs.sync"
+          data-i18n-title="tabs.sync"
+          data-i18n-tip="tabs.sync"
         ></button>
         <button
           class="rail-button nav-db"
           type="button"
           data-tab="local"
-          aria-label="本地目录"
-          title="本地目录"
-          data-tip="本地目录"
+          aria-label="Local folders"
+          title="Local folders"
+          data-tip="Local folders"
+          data-i18n-aria-label="tabs.local"
+          data-i18n-title="tabs.local"
+          data-i18n-tip="tabs.local"
         ></button>
+
         <button
           id="themeButton"
           class="rail-button rail-bottom theme-toggle"
           type="button"
-          aria-label="切到夜里"
-          title="切换主题"
-          data-tip="切换主题"
+          aria-label="Switch to dark mode"
+          title="Switch theme"
+          data-tip="Switch theme"
         ></button>
+        <button
+          id="languageButton"
+          class="rail-button language-toggle"
+          type="button"
+          aria-label="Switch to Chinese"
+          title="Switch to Chinese"
+          data-tip="Switch to Chinese"
+        >EN</button>
       </aside>
 
       <aside class="sidebar">
         <section class="workspace-card">
-          <div class="sidebar-title">工作区</div>
+          <div class="sidebar-title" data-i18n="workspace.title">Workspace</div>
           <div class="workspace-path-row">
             <span class="folder-icon"></span>
             <input
               id="pathInput"
               type="text"
-              placeholder="比如 ~/Code"
+              placeholder="For example ~/Code"
               autocomplete="off"
+              data-i18n-placeholder="workspace.pathPlaceholder"
             />
           </div>
           <div class="scan-actions">
-            <button id="selectButton" class="secondary" type="button">
-              选择
+            <button id="selectButton" class="secondary" type="button" data-i18n="workspace.select">
+              Select
             </button>
-            <button id="scanButton" class="primary" type="button">扫描</button>
+            <button id="scanButton" class="primary" type="button" data-i18n="workspace.scan">Scan</button>
           </div>
           <div id="errorBox" class="error-box" hidden></div>
         </section>
@@ -85,16 +110,17 @@
           <input
             id="filterInput"
             type="search"
-            placeholder="筛选仓库"
+            placeholder="Filter repositories"
             autocomplete="off"
+            data-i18n-placeholder="workspace.filterPlaceholder"
           />
         </div>
 
-        <div class="repo-section-label">仓库</div>
-        <div id="sidebarRepoList" class="sidebar-repo-list empty">尚未扫描</div>
+        <div class="repo-section-label" data-i18n="workspace.repositories">Repositories</div>
+        <div id="sidebarRepoList" class="sidebar-repo-list empty" data-i18n="state.notScanned">Not scanned yet</div>
 
-        <button id="addRepositoryButton" class="add-repo" type="button">
-          添加仓库
+        <button id="addRepositoryButton" class="add-repo" type="button" data-i18n="workspace.addRepository">
+          Add repository
         </button>
       </aside>
 
@@ -107,14 +133,25 @@
 
         <section class="panel" data-panel="local">
           <div class="panel-header">
-            <h2>非 Git 目录</h2>
-            <p>扫完以后，这里会放那些还没初始化成 Git 仓库的目录。</p>
+            <h2 data-i18n="local.title">Non-Git folders</h2>
+            <p data-i18n="local.description">After scanning, folders that are not initialized as Git repositories will appear here.</p>
           </div>
-          <div id="nonGitList" class="non-git-list empty">尚未扫描</div>
+          <div id="nonGitList" class="non-git-list empty" data-i18n="state.notScanned">Not scanned yet</div>
         </section>
       </main>
     </div>
 
-    <script src="/static/app.js"></script>
+    <input
+      id="importSnapshotInput"
+      type="file"
+      accept=".zip,application/zip"
+      hidden
+    />
+
+    <script>
+      window.__APP_BASE_PATH__ = {{ app_base_path|tojson }};
+    </script>
+    <script src="{{ message_js_url }}"></script>
+    <script src="{{ app_js_url }}"></script>
   </body>
 </html>

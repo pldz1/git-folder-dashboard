@@ -1,4 +1,3 @@
-fastapi
-uvicorn
+Flask
+Werkzeug
 pyinstaller
-python-dotenv

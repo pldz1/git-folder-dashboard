@@ -1,10 +1,14 @@
 const STORAGE_KEYS = {
   theme: "theme",
+  language: "language",
   workspacePath: "workspacePath",
   activeTab: "activeTab",
   activeRepoId: "activeRepoId",
   workingTreeSections: "workingTreeSections",
 };
+
+const DEFAULT_LANGUAGE = "en";
+const APP_BASE_PATH = window.__APP_BASE_PATH__ || "";
 
 let appConfig = {
   default_workspace: "",
@@ -15,6 +19,7 @@ const state = {
   nonGitDirs: [],
   busy: false,
   selecting: false,
+  language: localStorage.getItem(STORAGE_KEYS.language) || DEFAULT_LANGUAGE,
   activeRepoId: localStorage.getItem(STORAGE_KEYS.activeRepoId) || null,
   activeTab: localStorage.getItem(STORAGE_KEYS.activeTab) || "dashboard",
   filter: "",
@@ -42,24 +47,47 @@ const repoDetail = document.getElementById("repoDetail");
 const nonGitList = document.getElementById("nonGitList");
 const errorBox = document.getElementById("errorBox");
 const themeButton = document.getElementById("themeButton");
+const languageButton = document.getElementById("languageButton");
+const importSnapshotInput = document.getElementById("importSnapshotInput");
 const tabs = document.querySelectorAll(".rail-button[data-tab]");
 const panels = document.querySelectorAll("[data-panel]");
 
-const statusLabels = {
-  clean: "干净",
-  dirty: "有改动",
-  ahead: "待推送",
-  behind: "待拉取",
-  diverged: "有分叉",
-  no_remote: "未连远端",
-  error: "异常",
-};
+function t(key, vars = {}) {
+  const catalog = MESSAGES[state.language] || MESSAGES[DEFAULT_LANGUAGE];
+  const fallbackCatalog = MESSAGES[DEFAULT_LANGUAGE];
+  const template = catalog[key] || fallbackCatalog[key] || key;
+  return Object.entries(vars).reduce(
+    (result, [name, value]) => result.replaceAll(`{${name}}`, String(value)),
+    template
+  );
+}
 
-const scopeLabels = {
-  staged: "已暂存",
-  unstaged: "未暂存",
-  untracked: "未跟踪",
-};
+function labelFor(prefix, value) {
+  const key = `${prefix}.${value}`;
+  const catalog = MESSAGES[state.language] || MESSAGES[DEFAULT_LANGUAGE];
+  const fallbackCatalog = MESSAGES[DEFAULT_LANGUAGE];
+  return catalog[key] || fallbackCatalog[key] || value;
+}
+
+function applyStaticTranslations() {
+  document.documentElement.lang = state.language === "zh" ? "zh-CN" : "en";
+  document.querySelectorAll("[data-i18n]").forEach((node) => {
+    node.textContent = t(node.dataset.i18n);
+  });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach((node) => {
+    node.setAttribute("placeholder", t(node.dataset.i18nPlaceholder));
+  });
+  document.querySelectorAll("[data-i18n-title]").forEach((node) => {
+    node.setAttribute("title", t(node.dataset.i18nTitle));
+  });
+  document.querySelectorAll("[data-i18n-aria-label]").forEach((node) => {
+    node.setAttribute("aria-label", t(node.dataset.i18nAriaLabel));
+  });
+  document.querySelectorAll("[data-i18n-tip]").forEach((node) => {
+    node.dataset.tip = t(node.dataset.i18nTip);
+  });
+  document.title = t("app.title");
+}
 
 function setBusy(isBusy, repoId = null) {
   state.busy = isBusy;
@@ -145,16 +173,48 @@ function showError(message) {
   errorBox.hidden = !message;
 }
 
+function withBasePath(path) {
+  if (!APP_BASE_PATH) {
+    return path;
+  }
+  if (!path.startsWith("/")) {
+    return `${APP_BASE_PATH}/${path}`;
+  }
+  return `${APP_BASE_PATH}${path}`;
+}
+
 async function requestJson(url, options = {}) {
-  const response = await fetch(url, {
+  const response = await fetch(withBasePath(url), {
     headers: { "Content-Type": "application/json" },
     ...options,
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data.detail || data.message || "请求失败");
+    throw new Error(data.detail || data.message || t("error.requestFailed"));
   }
   return data;
+}
+
+async function downloadFile(url, filename) {
+  const response = await fetch(withBasePath(url), { method: "POST" });
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const data = await response.json();
+      detail = data.detail || data.message || "";
+    } catch {}
+    throw new Error(detail || t("error.requestFailed"));
+  }
+
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(objectUrl);
 }
 
 async function loadConfig() {
@@ -192,7 +252,7 @@ function normalizeFileEntries(entries = [], fallbackScope = "unstaged") {
 async function scan() {
   const path = pathInput.value.trim();
   if (!path) {
-    showError("请输入父文件夹路径。");
+    showError(t("error.enterWorkspacePath"));
     return;
   }
 
@@ -251,7 +311,9 @@ async function runRepoAction(repoId, action) {
     }
     if (!data.success) {
       const result = data.result || {};
-      showError(result.stderr || result.stdout || `${action} 执行失败`);
+      showError(
+        result.stderr || result.stdout || t("error.runActionFailed", { action })
+      );
     }
   } catch (error) {
     showError(error.message);
@@ -277,9 +339,7 @@ async function checkoutRepo(repoId, branch) {
 
   if (
     repo.dirty &&
-    !window.confirm(
-      `仓库 ${repo.name} 有本地修改，仍要 checkout 到 ${branch} 吗？`
-    )
+    !window.confirm(t("confirm.checkoutDirty", { repo: repo.name, branch }))
   ) {
     return;
   }
@@ -296,7 +356,7 @@ async function checkoutRepo(repoId, branch) {
     }
     if (!data.success) {
       const result = data.result || {};
-      showError(result.stderr || result.stdout || "checkout 执行失败");
+      showError(result.stderr || result.stdout || t("error.checkoutFailed"));
     }
   } catch (error) {
     showError(error.message);
@@ -309,7 +369,7 @@ async function commitRepo(repoId) {
   const input = document.querySelector(`[data-commit-input="${repoId}"]`);
   const message = input?.value.trim() || "";
   if (!message) {
-    showError("提交说明还没写。");
+    showError(t("error.commitMessageRequired"));
     return;
   }
 
@@ -327,7 +387,7 @@ async function commitRepo(repoId) {
       input.value = "";
     } else if (!data.success) {
       const result = data.result || {};
-      showError(result.stderr || result.stdout || "提交没成功");
+      showError(result.stderr || result.stdout || t("error.commitFailed"));
     }
   } catch (error) {
     showError(error.message);
@@ -362,7 +422,7 @@ async function previewFile(repoId, path, scope) {
       panelMode: state.preview.panelMode === "full" ? "full" : "split",
       content: data.content || "",
       loading: false,
-      error: data.success ? "" : data.stderr || "预览失败",
+      error: data.success ? "" : data.stderr || t("error.previewFailed"),
     };
   } catch (error) {
     state.preview = {
@@ -394,7 +454,9 @@ async function runFileAction(repoId, path, action, scope = "") {
     }
     if (!data.success) {
       const result = data.result || {};
-      showError(result.stderr || result.stdout || `${action} 执行失败`);
+      showError(
+        result.stderr || result.stdout || t("error.runActionFailed", { action })
+      );
     } else if (action !== "open") {
       resetPreview(repoId);
       if (scope && path) {
@@ -425,10 +487,77 @@ async function runBulkFileAction(repoId, scope, action) {
     }
     if (!data.success) {
       const result = data.result || {};
-      showError(result.stderr || result.stdout || `${action} 执行失败`);
+      showError(
+        result.stderr || result.stdout || t("error.runActionFailed", { action })
+      );
     } else {
       resetPreview(repoId);
     }
+  } catch (error) {
+    showError(error.message);
+  } finally {
+    setBusy(false, repoId);
+  }
+}
+
+async function exportRepoState(repoId) {
+  const repo = state.repos.find((item) => item.id === repoId);
+  if (!repo) {
+    return;
+  }
+
+  showError("");
+  setBusy(true, repoId);
+  try {
+    await downloadFile(
+      `/api/repos/${repoId}/export-state`,
+      `${repo.name}-working-tree-snapshot.zip`
+    );
+  } catch (error) {
+    showError(error.message);
+  } finally {
+    setBusy(false, repoId);
+  }
+}
+
+function chooseSnapshotFile(repoId) {
+  if (!importSnapshotInput) {
+    showError(t("error.importFileRequired"));
+    return;
+  }
+  importSnapshotInput.value = "";
+  importSnapshotInput.dataset.repoId = repoId;
+  importSnapshotInput.click();
+}
+
+async function importRepoState(repoId, file) {
+  if (!file) {
+    showError(t("error.importFileRequired"));
+    return;
+  }
+
+  if (!window.confirm(t("confirm.importState"))) {
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append("snapshot", file);
+
+  showError("");
+  setBusy(true, repoId);
+  try {
+    const response = await fetch(withBasePath(`/api/repos/${repoId}/import-state`), {
+      method: "POST",
+      body: formData,
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.detail || data.message || t("error.requestFailed"));
+    }
+    if (data.repo) {
+      updateRepo(data.repo);
+    }
+    resetPreview(repoId);
   } catch (error) {
     showError(error.message);
   } finally {
@@ -441,21 +570,41 @@ function render() {
   selectButton.disabled = locked;
   scanButton.disabled = locked;
   addRepositoryButton.disabled = locked;
-  selectButton.textContent = state.selecting ? "选择中" : "选择";
+  applyStaticTranslations();
+  selectButton.textContent = state.selecting
+    ? t("workspace.selecting")
+    : t("workspace.select");
   scanButton.textContent =
-    state.busy && !state.activeRepoId ? "扫描中" : "扫描";
+    state.busy && !state.activeRepoId
+      ? t("workspace.scanning")
+      : t("workspace.scan");
   document.documentElement.dataset.theme = state.theme;
   themeButton.classList.toggle("theme-dark", state.theme === "dark");
   themeButton.classList.toggle("theme-light", state.theme !== "dark");
+  languageButton.textContent = t("language.buttonLabel");
+  languageButton.setAttribute(
+    "aria-label",
+    state.language === "zh"
+      ? t("language.switchToEn")
+      : t("language.switchToZh")
+  );
+  languageButton.setAttribute(
+    "title",
+    state.language === "zh"
+      ? t("language.switchToEn")
+      : t("language.switchToZh")
+  );
+  languageButton.dataset.tip =
+    state.language === "zh"
+      ? t("language.switchToEn")
+      : t("language.switchToZh");
   themeButton.setAttribute(
     "aria-label",
-    state.theme === "dark" ? "切回亮色" : "切到夜里"
+    state.theme === "dark" ? t("theme.switchToLight") : t("theme.switchToDark")
   );
-  themeButton.setAttribute(
-    "title",
-    state.theme === "dark" ? "切回亮色" : "切到夜里"
-  );
-  themeButton.dataset.tip = state.theme === "dark" ? "切回亮色" : "切到夜里";
+  themeButton.setAttribute("title", t("theme.switch"));
+  themeButton.dataset.tip =
+    state.theme === "dark" ? t("theme.switchToLight") : t("theme.switchToDark");
   themeButton.setAttribute(
     "aria-pressed",
     state.theme === "dark" ? "true" : "false"
@@ -493,8 +642,8 @@ function renderSidebar() {
   if (visibleRepos.length === 0) {
     sidebarRepoList.className = "sidebar-repo-list empty";
     sidebarRepoList.textContent = state.repos.length
-      ? "没有匹配的仓库"
-      : "尚未扫描";
+      ? t("state.noMatchingRepos")
+      : t("state.notScanned");
     return;
   }
 
@@ -534,7 +683,9 @@ function renderSidebar() {
 function renderRepoDetail() {
   const repo = getActiveRepo();
   if (!repo) {
-    repoDetail.innerHTML = `<div class="empty-state">尚未选择仓库</div>`;
+    repoDetail.innerHTML = `<div class="empty-state">${escapeHtml(
+      t("state.noRepoSelected")
+    )}</div>`;
     return;
   }
 
@@ -561,84 +712,128 @@ function renderRepoDetail() {
         </div>
         <span class="status-pill status-${escapeHtml(
           repo.status
-        )}">${escapeHtml(statusLabels[repo.status] || repo.status)}</span>
+        )}">${escapeHtml(labelFor("status", repo.status))}</span>
       </div>
       <div class="actions">
-        <input data-commit-input="${
-          repo.id
-        }" type="text" placeholder="提交说明" ${anyBusy ? "disabled" : ""}>
-        <button class="primary" type="button" data-action="commit" data-repo-id="${
-          repo.id
-        }" ${anyBusy ? "disabled" : ""}>提交</button>
-        <button type="button" data-action="push" data-repo-id="${repo.id}" ${
+        <div class="action-row action-row-commit">
+          <input data-commit-input="${
+            repo.id
+          }" type="text" placeholder="${escapeHtml(
+    t("repo.commitPlaceholder")
+  )}" ${anyBusy ? "disabled" : ""}>
+          <button class="primary" type="button" data-action="commit" data-repo-id="${
+            repo.id
+          }" ${anyBusy ? "disabled" : ""}>${escapeHtml(t("repo.commit"))}</button>
+        </div>
+        <div class="action-row action-row-secondary">
+          <div class="action-group">
+            <button type="button" data-action="push" data-repo-id="${repo.id}" ${
     anyBusy ? "disabled" : ""
-  }>推送</button>
-        <button type="button" data-action="pull" data-repo-id="${repo.id}" ${
+  }>${escapeHtml(t("repo.push"))}</button>
+            <button type="button" data-action="pull" data-repo-id="${repo.id}" ${
     anyBusy ? "disabled" : ""
-  }>拉取</button>
-        <button type="button" data-action="fetch" data-repo-id="${repo.id}" ${
+  }>${escapeHtml(t("repo.pull"))}</button>
+            <button type="button" data-action="fetch" data-repo-id="${repo.id}" ${
     anyBusy ? "disabled" : ""
-  }>抓取</button>
-        <button type="button" data-action="open" data-repo-id="${repo.id}" ${
+  }>${escapeHtml(t("repo.fetch"))}</button>
+            <button type="button" data-action="open" data-repo-id="${repo.id}" ${
     anyBusy ? "disabled" : ""
-  }>打开</button>
-        <button type="button" data-action="refresh" data-repo-id="${repo.id}" ${
+  }>${escapeHtml(t("repo.open"))}</button>
+            <button type="button" data-action="refresh" data-repo-id="${repo.id}" ${
     anyBusy ? "disabled" : ""
-  }>刷新</button>
+  }>${escapeHtml(t("repo.refresh"))}</button>
+          </div>
+          <div class="action-group action-group-snapshot">
+            <button type="button" data-action="export-state" data-repo-id="${repo.id}" ${
+    anyBusy ? "disabled" : ""
+  }>${escapeHtml(t("repo.exportState"))}</button>
+            <button type="button" data-action="import-state" data-repo-id="${repo.id}" ${
+    anyBusy ? "disabled" : ""
+  }>${escapeHtml(t("repo.importState"))}</button>
+          </div>
+        </div>
       </div>
       ${
         isBusy
-          ? `<p class="repo-message">正在处理...</p>`
+          ? `<p class="repo-message">${escapeHtml(t("repo.processing"))}</p>`
           : `<p class="repo-message">${escapeHtml(repo.message || "")}</p>`
       }
     </section>
 
     <section class="panel changes-panel">
-      <h2>分支</h2>
+      <h2>${escapeHtml(t("repo.branches"))}</h2>
       <div class="branch-grid">
-        ${branchBlock("本地", localBranches, repo.branch, repo.id, anyBusy)}
-        ${branchBlock("远端", remoteBranches, repo.branch, repo.id, anyBusy)}
+        ${branchBlock(
+          t("branch.local"),
+          localBranches,
+          repo.branch,
+          repo.id,
+          anyBusy
+        )}
+        ${branchBlock(
+          t("branch.remote"),
+          remoteBranches,
+          repo.branch,
+          repo.id,
+          anyBusy
+        )}
       </div>
     </section>
 
     <section class="panel status-panel">
       <div class="panel-header">
         <div>
-          <h2>工作区改动</h2>
-          <p>点击文件查看预览</p>
+          <h2>${escapeHtml(t("repo.workingTree"))}</h2>
+          <p>${escapeHtml(t("repo.clickToPreview"))}</p>
         </div>
       </div>
       <div class="working-tree-layout mode-${previewMode}">
         <div class="working-tree-sidebar">
           ${fileListCard({
-            title: "已暂存",
+            title: t("scope.staged"),
             scope: "staged",
             files: stagedFiles,
             anyBusy,
             headerActions: [
-              { label: "全部撤回", action: "unstage_all", danger: false },
+              {
+                label: t("files.unstageAll"),
+                action: "unstage_all",
+                danger: false,
+              },
             ],
             itemActions: ["view", "unstage"],
           })}
           ${fileListCard({
-            title: "未暂存",
+            title: t("scope.unstaged"),
             scope: "unstaged",
             files: unstagedFiles,
             anyBusy,
             headerActions: [
-              { label: "全部暂存", action: "stage_all", danger: false },
-              { label: "全部丢弃", action: "discard_all", danger: true },
+              {
+                label: t("files.stageAll"),
+                action: "stage_all",
+                danger: false,
+              },
+              {
+                label: t("files.discardAll"),
+                action: "discard_all",
+                danger: true,
+              },
             ],
             itemActions: ["view", "stage", "discard"],
           })}
           ${fileListCard({
-            title: "未跟踪",
+            title: t("scope.untracked"),
             scope: "untracked",
             files: untrackedFiles,
             anyBusy,
             headerActions: [
-              { label: "全部加入", action: "add_all", danger: false },
-              { label: "全部删除", action: "delete_all", danger: true },
+              { label: t("files.addAll"), action: "add_all", danger: false },
+              {
+                label: t("files.deleteAll"),
+                action: "delete_all",
+                danger: true,
+              },
             ],
             itemActions: ["view", "add", "delete", "ignore"],
           })}
@@ -652,7 +847,7 @@ function renderRepoDetail() {
 function renderNonGit() {
   if (state.nonGitDirs.length === 0) {
     nonGitList.className = "non-git-list empty";
-    nonGitList.textContent = "无";
+    nonGitList.textContent = t("state.none");
     return;
   }
 
@@ -726,7 +921,9 @@ function fileListCard({
 
   const content = files.length
     ? buildFileTreeRows(files, scope, itemActions, anyBusy)
-    : `<div class="file-list-empty-card">暂时没有</div>`;
+    : `<div class="file-list-empty-card">${escapeHtml(
+        t("state.emptyNow")
+      )}</div>`;
 
   return `
     <section class="file-card ${isExpanded ? "expanded" : "collapsed"}">
@@ -849,21 +1046,29 @@ function fileRow(file, scope, itemActions, anyBusy, depth = 0) {
 
 function fileActionButton(action, file, scope, anyBusy) {
   const config = {
-    view: { label: "查看", action: "", className: "wt-view" },
-    stage: { label: "暂存", action: "stage", className: "wt-stage" },
+    view: { label: t("files.view"), action: "", className: "wt-view" },
+    stage: { label: t("files.stage"), action: "stage", className: "wt-stage" },
     discard: {
-      label: "丢弃",
+      label: t("files.discard"),
       action: "discard",
       className: "danger-text wt-discard",
     },
-    unstage: { label: "撤回暂存", action: "unstage", className: "wt-unstage" },
-    add: { label: "加入暂存", action: "add", className: "wt-add" },
+    unstage: {
+      label: t("files.unstage"),
+      action: "unstage",
+      className: "wt-unstage",
+    },
+    add: { label: t("files.add"), action: "add", className: "wt-add" },
     delete: {
-      label: "删除",
+      label: t("files.delete"),
       action: "delete",
       className: "danger-text wt-delete",
     },
-    ignore: { label: "忽略", action: "ignore", className: "wt-ignore" },
+    ignore: {
+      label: t("files.ignore"),
+      action: "ignore",
+      className: "wt-ignore",
+    },
   }[action];
 
   if (!config) {
@@ -900,13 +1105,16 @@ function fileActionButton(action, file, scope, anyBusy) {
 }
 
 function previewPanel(repoId) {
-  const title = `${state.preview.path} · ${
-    scopeLabels[state.preview.scope] || state.preview.scope
-  }`;
+  const title = `${state.preview.path} · ${labelFor(
+    "scope",
+    state.preview.scope
+  )}`;
   let body = "";
 
   if (state.preview.loading) {
-    body = `<div class="preview-body empty-state">加载预览中...</div>`;
+    body = `<div class="preview-body empty-state">${escapeHtml(
+      t("preview.loading")
+    )}</div>`;
   } else if (state.preview.error) {
     body = `<div class="preview-body preview-error">${escapeHtml(
       state.preview.error
@@ -924,11 +1132,17 @@ function previewPanel(repoId) {
         <div class="preview-toolbar">
           <button class="preview-toggle ${
             state.preview.panelMode === "split" ? "active" : ""
-          }" type="button" data-preview-mode="split">并排看</button>
+          }" type="button" data-preview-mode="split">${escapeHtml(
+    t("preview.split")
+  )}</button>
           <button class="preview-toggle ${
             state.preview.panelMode === "full" ? "active" : ""
-          }" type="button" data-preview-mode="full">铺满</button>
-          <button class="preview-toggle" type="button" data-preview-mode="hidden">收起</button>
+          }" type="button" data-preview-mode="full">${escapeHtml(
+    t("preview.full")
+  )}</button>
+          <button class="preview-toggle" type="button" data-preview-mode="hidden">${escapeHtml(
+            t("preview.hide")
+          )}</button>
         </div>
       </div>
       ${body}
@@ -939,7 +1153,7 @@ function previewPanel(repoId) {
 function renderPreviewContent(preview) {
   const lines = (preview.content || "").split("\n");
   if (!preview.content) {
-    return `<div class="empty-state">没有可显示的内容</div>`;
+    return `<div class="empty-state">${escapeHtml(t("preview.empty"))}</div>`;
   }
 
   const rows = lines
@@ -986,7 +1200,7 @@ function branchBlock(label, branches, currentBranch, repoId, disabled) {
           `;
         })
         .join("")
-    : `<span class="branch-empty">还没有</span>`;
+    : `<span class="branch-empty">${escapeHtml(t("branch.empty"))}</span>`;
 
   return `
     <div class="branch-block">
@@ -1017,16 +1231,16 @@ function findFileScope(repo, path) {
 
 function getDangerPrompt(action, scope, count, filePath = "") {
   if (action === "discard") {
-    return `确认丢弃 ${filePath} 的本地修改吗？`;
+    return t("confirm.discardFile", { file: filePath });
   }
   if (action === "delete") {
-    return `确认删除 ${filePath} 吗？`;
+    return t("confirm.deleteFile", { file: filePath });
   }
   if (action === "discard_all") {
-    return `确认把这 ${count} 个文件的改动都丢掉吗？`;
+    return t("confirm.discardAll", { count });
   }
   if (action === "delete_all") {
-    return `确认把这 ${count} 个未跟踪文件都删掉吗？`;
+    return t("confirm.deleteAll", { count });
   }
   return "";
 }
@@ -1047,6 +1261,20 @@ themeButton.addEventListener("click", () => {
   state.theme = state.theme === "dark" ? "light" : "dark";
   localStorage.setItem(STORAGE_KEYS.theme, state.theme);
   render();
+});
+languageButton.addEventListener("click", () => {
+  state.language = state.language === "zh" ? "en" : "zh";
+  localStorage.setItem(STORAGE_KEYS.language, state.language);
+  render();
+});
+importSnapshotInput.addEventListener("change", async () => {
+  const repoId = importSnapshotInput.dataset.repoId;
+  const file = importSnapshotInput.files?.[0] || null;
+  if (!repoId) {
+    return;
+  }
+  await importRepoState(repoId, file);
+  importSnapshotInput.value = "";
 });
 filterInput.addEventListener("input", () => {
   state.filter = filterInput.value;
@@ -1187,6 +1415,10 @@ repoDetail.addEventListener("click", async (event) => {
     checkoutRepo(repoId, button.dataset.branch);
   } else if (action === "open") {
     openRepo(repoId);
+  } else if (action === "export-state") {
+    exportRepoState(repoId);
+  } else if (action === "import-state") {
+    chooseSnapshotFile(repoId);
   } else if (action === "commit") {
     commitRepo(repoId);
   } else {
@@ -1196,7 +1428,8 @@ repoDetail.addEventListener("click", async (event) => {
 
 async function restoreWorkspace() {
   await loadConfig();
-  const savedPath = localStorage.getItem(STORAGE_KEYS.workspacePath)?.trim() || "";
+  const savedPath =
+    localStorage.getItem(STORAGE_KEYS.workspacePath)?.trim() || "";
   const initialPath = savedPath || appConfig.default_workspace;
   if (!initialPath) {
     render();

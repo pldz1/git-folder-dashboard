@@ -1,16 +1,18 @@
 # Git Folder Dashboard
 
-一个本地运行的 Git 仓库管理面板。
+English | [中文](README.zh-CN.md)
 
-给定一个父目录，自动扫描其一级子目录中的 Git 仓库，并通过 Web 页面统一查看状态、文件改动，并执行常见操作。
+A locally running dashboard for managing Git repositories.
 
-定位：多仓库总览工具，而不是 IDE 替代品。
+Given a parent directory, it automatically scans first-level subdirectories for Git repositories, and provides a unified web interface to view their status, file changes, and perform common operations.
+
+**Positioning:** A multi-repository overview tool, not an IDE replacement.
 
 ---
 
-## 功能概览
+## Overview
 
-适用于类似结构：
+Suitable for directory structures like:
 
 ```text
 ~/Code
@@ -20,192 +22,267 @@
   notes
 ```
 
-提供能力：
+Features:
 
-- 扫描目录，识别 Git 仓库
-- 展示当前分支、同步状态（ahead / behind）
-- 展示工作区改动（staged / unstaged / untracked）
-- 查看文件 diff 或内容
-- 执行常见操作：
+- Scan directories and detect Git repositories
+
+- Display current branch and sync status (ahead / behind)
+
+- Show working tree changes (staged / unstaged / untracked)
+
+- Export the current working tree mismatch state as a snapshot zip
+
+- Import a snapshot zip and forcibly apply it to the current working tree
+
+- View file diffs or contents
+
+- Execute common operations:
 
   - fetch / pull / push
   - commit / checkout
 
-- 文件级操作：
+- File-level operations:
 
-  - 暂存 / 撤回暂存
-  - 丢弃改动
-  - 删除 / 忽略未跟踪文件
+  - stage / unstage
+  - discard changes
+  - delete / ignore untracked files
+
+Runtime compatibility:
+
+- Supports Python 3.6
+- Suitable for Ubuntu 18.04 environments
+- Dependency versions are pinned intentionally because newer ASGI stacks are not reliable in this Python 3.6 target
+- The tested compatibility set is `Flask 2.0.3` + `Werkzeug 2.0.3`
+- Supports mounting under a subpath such as `/git` via `--base-path /git`
 
 ---
 
-## 架构
+## Architecture
 
-整体结构保持简单：
+The overall design is intentionally simple:
 
-- 后端（Python / FastAPI）：执行 Git 命令、访问文件系统、返回 JSON
-- 前端（原生 HTML / JS）：渲染 UI、管理状态、处理交互
-- 内存存储：维护 `repo_id -> path` 映射
+- Backend (Python / Flask): executes Git commands, accesses the filesystem, returns JSON
+- Frontend (plain HTML / JS): renders UI, manages state, handles interactions
+- In-memory store: maintains `repo_id -> path` mapping
 
-数据流：
+Data flow:
 
 ```text
-浏览器
+Browser
   ↓
 static (HTML / JS)
   ↓
-FastAPI (app.py)
+Flask (app.py)
   ↓
 git_service.py
   ↓
-Git + 文件系统
+Git + filesystem
 ```
 
 ---
 
-## 项目结构
+## Project Structure
 
 ```text
 git-folder-dashboard/
   app.py
   git_service.py
+  snapshot_service.py
   repo_store.py
   static/
     index.html
     style.css
+    message.js
     app.js
 ```
 
-职责划分：
+Responsibilities:
 
 - `app.py`
 
-  - 路由定义
-  - 参数校验
-  - 调用服务层
-  - 返回响应
+  - Route definitions
+  - Parameter validation
+  - Calls service layer
+  - Returns responses
 
 - `git_service.py`
 
-  - 所有 Git 操作
-  - 状态解析
-  - 文件操作实现
+  - All Git operations
+  - Status parsing
+  - File operations
+
+- `snapshot_service.py`
+
+  - Build working tree snapshots
+  - Export mismatch state as zip
+  - Import snapshot and overwrite files directly
 
 - `repo_store.py`
 
-  - 内存映射：`repo_id -> path`
+  - In-memory mapping: `repo_id -> path`
 
 - `static/`
 
-  - 前端 UI 与交互逻辑
+  - Frontend UI and interaction logic
 
 ---
 
-## 后端职责
+## Backend Responsibilities
 
-仅处理三类逻辑：
+Handles only three types of logic:
 
-1. 接收请求
-2. 执行 Git / 文件操作
-3. 返回 JSON
+1. Receive requests
+2. Execute Git / file operations
+3. Return JSON
 
-不包含：
+Does NOT include:
 
-- 模板渲染
-- 持久化存储
-- 前端状态管理
+- Template rendering
+- Persistent storage
+- Frontend state management
 
 ---
 
-## 核心模块说明
+## Core Modules
 
 ### git_service.py
 
-核心业务逻辑所在。
+Core business logic.
 
-#### Git 执行入口
+#### Git execution entry
 
 ```text
 run_git(repo_path, args)
 ```
 
-统一执行所有 Git 命令并返回标准结构结果。
+Executes all Git commands in a unified way and returns structured results.
 
 ---
 
-#### 仓库状态
+#### Repository status
 
 ```text
 get_repo_status(repo_id, repo_path)
 ```
 
-返回信息包括：
+Returns:
 
-- 当前分支
-- 分支列表（本地 / 远端）
-- 文件改动（staged / unstaged / untracked）
-- 是否 dirty
-- ahead / behind
-- 仓库状态（clean / dirty / diverged 等）
+- Current branch
+- Branch list (local / remote)
+- File changes (staged / unstaged / untracked)
+- Dirty status
+- Ahead / behind
+- Repository state (clean / dirty / diverged, etc.)
 
 ---
 
-#### 文件操作
+#### File operations
 
-统一入口：
+Unified entry:
 
 ```text
 apply_file_action()
 ```
 
-支持：
+Supports:
 
 - stage → `git add`
 - unstage → `git restore --staged`
 - discard → `git restore`
-- delete → 删除文件
-- ignore → 写入 `.git/info/exclude`
+- delete → remove file
+- ignore → write to `.git/info/exclude`
+
+---
+
+### snapshot_service.py
+
+Implements working tree snapshot export / import.
+
+Principle:
+
+- Does not use `git apply` as the primary restore path
+- Exports the current working tree result, not a patch stream
+- Restores by direct file overwrite / creation / deletion
+
+Snapshot zip contents:
+
+- `manifest.json`
+- `files/*`
+
+Manifest records:
+
+- relative path
+- entry kind (`modified` / `added` / `deleted`)
+- scope (`staged` / `unstaged` / `untracked`)
+- payload file location inside the zip when content is required
+
+Current behavior boundary:
+
+- Restores the final working tree file state
+- Supports modified / added / deleted files
+- Supports nested newly created files
+- Supports binary files because file contents are stored directly in the zip
+- Does not attempt to recreate the exact Git index staging layout
+- Does not rely on patch context matching
 
 ---
 
 ### repo_store.py
 
-维护仓库映射关系：
+Maintains repository mapping:
 
 ```text
-repo_id → 本地路径
+repo_id → local path
 ```
 
-特点：
+Characteristics:
 
-- 纯内存存储
-- 不持久化
-- 服务重启后需重新扫描
+- In-memory only
+- No persistence
+- Requires re-scan after restart
 
 ---
 
 ### app.py
 
-负责请求调度：
+Handles request dispatching:
 
 ```text
-请求 → 路由 → service → refresh → 返回
+request → route → service → refresh → response
 ```
 
-关键流程：
+Key flow:
 
-- 根据 `repo_id` 获取路径
-- 调用对应 Git 操作
-- 刷新仓库状态
-- 返回最新数据
+- Get path from `repo_id`
+- Execute Git operation
+- Refresh repository state
+- Return latest data
+
+Startup notes:
+
+- Uses Flask's synchronous local server instead of an ASGI stack
+- Avoids `uvicorn`, `h11`, and `asyncio` compatibility issues on Python 3.6
+- Supports subpath hosting by stripping a configured URL prefix before routing
+
+Example:
+
+```bash
+python app.py --host 0.0.0.0 --port 8765 --base-path /git
+```
+
+Then the app is served under:
+
+```text
+https://example.com/git/
+```
 
 ---
 
-## 前端说明
+## Frontend
 
-无框架实现，基于单一状态驱动渲染。
+No framework, fully state-driven rendering.
 
-核心状态：
+Core state:
 
 ```text
 state = {
@@ -217,46 +294,47 @@ state = {
 }
 ```
 
-职责：
+Responsibilities:
 
-- 渲染仓库列表与详情
-- 管理 UI 状态（tab / 展开 / 主题）
-- 调用 API
-- 根据返回结果重新渲染
+- Render repository list and details
+- Manage UI state (tabs / expand / theme)
+- Manage language switching (English / Chinese)
+- Call APIs
+- Re-render based on results
 
 ---
 
-### 文件树渲染
+### File Tree Rendering
 
-后端返回扁平路径列表：
+Backend returns flat paths:
 
 ```text
 a/b/c.txt
 ```
 
-前端负责：
+Frontend:
 
-1. 拆分路径
-2. 构建树结构
-3. 渲染节点
+1. Splits path
+2. Builds tree
+3. Renders nodes
 
-优点：
+Advantages:
 
-- 后端保持简单
-- UI 可自由调整
+- Keeps backend simple
+- Flexible UI
 
 ---
 
-## 典型流程
+## Typical Workflow
 
-以“暂存文件”为例：
+Example: staging a file
 
 ```text
-点击按钮
+Click button
   ↓
-前端请求 /files/action
+Frontend POST /files/action
   ↓
-app.py 路由
+app.py route
   ↓
 apply_file_action()
   ↓
@@ -266,33 +344,47 @@ refresh_repo()
   ↓
 get_repo_status()
   ↓
-返回结果
+Return result
   ↓
-前端重新渲染
+Frontend re-render
 ```
 
 ---
 
-## 配置
+## Configuration
 
-`.env`：
-
-```env
-LOCAL_GIT_MANAGER_HOST=127.0.0.1
-LOCAL_GIT_MANAGER_PORT=8765
-LOCAL_GIT_MANAGER_DEFAULT_WORKSPACE=~/Code
-LOCAL_GIT_MANAGER_NO_BROWSER=0
-```
+Configured via command-line arguments. No `.env` required.
 
 ---
 
-## 启动
+## Run
 
-```bash
-python app.py
-```
+Common commands:
 
-默认地址：
+| Scenario | Command |
+| --- | --- |
+| Start with defaults | `python app.py` |
+| Custom host / port / default path | `python app.py --host 127.0.0.1 --port 8080 --default-path ~/Code --no-browser=true` |
+| Mount under a subpath | `python app.py --host 0.0.0.0 --port 8765 --base-path /git` |
+
+Arguments:
+
+| Argument | Description | Default |
+| --- | --- | --- |
+| `--host` | Bind address | `127.0.0.1` |
+| `--port` | Port | `8765` |
+| `--default-path` | Default workspace path | `""` |
+| `--base-path` | URL prefix for subpath hosting, such as `/git` | `""` |
+| `--no-browser` | Disable auto browser open, supports `true/false` | `false` |
+
+Aliases:
+
+| Alias | Equivalent |
+| --- | --- |
+| `--defaut-path` | `--default-path` |
+| `--no-brower` | `--no-browser` |
+
+Default URL:
 
 ```text
 http://127.0.0.1:8765
@@ -300,18 +392,46 @@ http://127.0.0.1:8765
 
 ---
 
+## Build
+
+```bash
+pip install -r requirements.txt
+pyinstaller --onefile --name git-folder-dashboard --add-data "static:static" app.py
+```
+
+Windows:
+
+```bat
+pip install -r requirements.txt
+pyinstaller --onefile --name git-folder-dashboard --add-data "static;static" app.py
+```
+
+Output:
+
+```bash
+dist/git-folder-dashboard
+```
+
+Example:
+
+```bash
+./dist/git-folder-dashboard --host 127.0.0.1 --port 8080 --default-path ~/Code --base-path /git --no-browser=true
+```
+
+---
+
 ## API
 
-### 配置
+### Config
 
 - `GET /api/config`
 
-### 工作区
+### Workspace
 
 - `POST /api/select-folder`
 - `POST /api/scan`
 
-### 仓库操作
+### Repo Actions
 
 - `POST /api/repos/{id}/refresh`
 - `POST /api/repos/{id}/fetch`
@@ -321,7 +441,7 @@ http://127.0.0.1:8765
 - `POST /api/repos/{id}/checkout`
 - `POST /api/repos/{id}/discard`
 
-### 文件操作
+### File Actions
 
 - `POST /api/repos/{id}/files/preview`
 - `POST /api/repos/{id}/files/action`
@@ -329,29 +449,27 @@ http://127.0.0.1:8765
 
 ---
 
-## 核心调用链
-
-后端的主要调用关系可以简化为：
+## Core Call Chain
 
 ```text
-浏览器请求
-  → app.py 路由
+Browser request
+  → app.py route
     → require_repo()
     → git_service.*()
     → refresh_repo()
       → get_repo_status()
-    → 返回 JSON
+    → return JSON
 ```
 
-职责划分很明确：
+Responsibilities:
 
-- `app.py`：决定调用哪个动作
-- `git_service.py`：负责具体执行
-- `get_repo_status()`：负责生成最终展示数据
+- `app.py`: routing & orchestration
+- `git_service.py`: execution
+- `get_repo_status()`: view data generation
 
 ---
 
-## 扫描流程
+## Scan Flow
 
 ```text
 POST /api/scan
@@ -362,14 +480,14 @@ POST /api/scan
     → repo_store.update()
 ```
 
-输出：
+Output:
 
-- 仓库列表
-- 非 Git 目录列表
+- Repository list
+- Non-Git directories
 
 ---
 
-## 文件操作链路
+## File Operation Flow
 
 ```text
 POST /files/action
@@ -383,14 +501,14 @@ POST /files/action
       → get_repo_status()
 ```
 
-关键点：
+Key points:
 
-- 所有文件操作统一从 `apply_file_action()` 进入
-- 操作完成后强制刷新状态，保证前端一致性
+- All file operations go through `apply_file_action()`
+- State is always refreshed afterward
 
 ---
 
-## 预览链路
+## Preview Flow
 
 ```text
 POST /files/preview
@@ -401,15 +519,15 @@ POST /files/preview
       → read file
 ```
 
-根据文件状态决定预览方式：
+Behavior:
 
 - staged → `git diff --cached`
 - unstaged → `git diff`
-- untracked → 直接读取文件
+- untracked → read file directly
 
 ---
 
-## 仓库操作链路
+## Repo Operation Flow
 
 ```text
 POST /repos/{id}/push
@@ -418,17 +536,17 @@ POST /repos/{id}/push
     → refresh_repo()
 ```
 
-其他操作类似：
+Others follow the same pattern:
 
 ```text
 fetch / pull / checkout / commit
-  → 对应 git_service 函数
+  → git_service
   → refresh_repo()
 ```
 
 ---
 
-## 前端调用链
+## Frontend Call Flow
 
 ```text
 scan()
@@ -436,12 +554,12 @@ previewFile()
 runRepoAction()
 runFileAction()
   → requestJson()
-    → 调用后端 API
-  → 更新 state
+    → call backend API
+  → update state
   → render()
 ```
 
-渲染拆分：
+Render breakdown:
 
 ```text
 render()
@@ -453,35 +571,35 @@ render()
 
 ---
 
-## 一个完整操作路径（示例）
+## One Complete Example
 
 ```text
-点击「暂存文件」
+Click "Stage file"
   → runFileAction()
   → POST /files/action
   → apply_file_action()
   → git add
   → refresh_repo()
   → get_repo_status()
-  → 返回最新状态
+  → return state
   → render()
 ```
 
 ---
 
-## 关键函数分层
+## Key Layers
 
-### 调度层（app.py）
+### Orchestration (app.py)
 
 ```text
 require_repo()
 refresh_repo()
-各类 /api 路由
+API routes
 ```
 
 ---
 
-### 核心逻辑（git_service.py）
+### Core Logic (git_service.py)
 
 ```text
 run_git()
@@ -493,7 +611,7 @@ discard_repo_changes()
 
 ---
 
-### 文件操作
+### File Operations
 
 ```text
 apply_file_action()
@@ -508,7 +626,7 @@ ignore_untracked_file()
 
 ---
 
-### 状态解析
+### Status Parsing
 
 ```text
 parse_porcelain_line()
@@ -518,43 +636,41 @@ build_file_entry()
 
 ---
 
-## 一句话总结结构
+## One-line Summary
 
 ```text
-app.py 负责“调度”
-git_service.py 负责“执行”
-get_repo_status() 负责“生成视图数据”
-前端负责“渲染”
+app.py → orchestration
+git_service.py → execution
+get_repo_status() → data generation
+frontend → rendering
 ```
 
 ---
 
-## 仓库状态说明
+## Repo Status
 
-- `clean`：无改动
-- `dirty`：存在未提交改动
-- `ahead`：本地领先远端
-- `behind`：落后远端
-- `diverged`：分叉
-- `no_remote`：无 upstream
-- `error`：状态获取失败
-
----
-
-## 限制
-
-- 仅扫描一级子目录
-- 不持久化仓库数据
-- commit 为统一提交（`git add .`）
-- 无权限控制（本地使用场景）
+- `clean`
+- `dirty`
+- `ahead`
+- `behind`
+- `diverged`
+- `no_remote`
+- `error`
 
 ---
 
-## 阅读顺序建议
+## Limitations
 
-- 后端入口：`app.py`
-- 核心逻辑：`git_service.py`
-- 数据映射：`repo_store.py`
-- 前端实现：`static/app.js`
+- Only scans first-level subdirectories
+- No persistence
+- Commit uses `git add .`
+- No permission control (local use only)
 
 ---
+
+## Suggested Reading Order
+
+- Entry: `app.py`
+- Core: `git_service.py`
+- Mapping: `repo_store.py`
+- Frontend: `static/app.js`

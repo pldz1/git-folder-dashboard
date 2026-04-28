@@ -16,8 +16,9 @@ def run_git(repo_path: Path, args: List[str]) -> dict:
             ["git", *args],
             cwd=repo_path,
             shell=False,
-            capture_output=True,
-            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            universal_newlines=True,
             timeout=GIT_TIMEOUT_SECONDS,
         )
         return {
@@ -189,19 +190,19 @@ def get_repo_status(repo_id: str, repo_path: Path) -> dict:
 
     if base["dirty"]:
         base["status"] = "dirty"
-        base["message"] = "仓库存在改动."
+        base["message"] = "Current repository has modified files.(仓库存在改动.)"
     elif base["ahead"] > 0 and base["behind"] > 0:
         base["status"] = "diverged"
-        base["message"] = "本地分支和远程分支不一致."
+        base["message"] = "Local branch is not synchronized with the remote branch.(本地分支和远程分支不一致.)"
     elif base["ahead"] > 0:
         base["status"] = "ahead"
-        base["message"] = "本地分支领先远程分支."
+        base["message"] = "The local branch is ahead of the remote branch.(本地分支领先远程分支.)"
     elif base["behind"] > 0:
         base["status"] = "behind"
-        base["message"] = "本地分支落后远程分支."
+        base["message"] = "The local branch is behind of the remote branch.(本地分支落后远程分支)."
     else:
         base["status"] = "clean"
-        base["message"] = "状态一致, 无需更新."
+        base["message"] = "No update.(状态一致, 无需更新.)"
 
     return base
 

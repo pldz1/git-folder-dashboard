@@ -237,6 +237,12 @@ input:focus {
   background-color: currentColor;
 }
 
+.language-toggle {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
 .theme-toggle.theme-light::before {
   -webkit-mask: url("./icons/moon.svg") no-repeat center / contain;
   mask: url("./icons/moon.svg") no-repeat center / contain;
@@ -311,7 +317,7 @@ input:focus {
   height: 30px;
   border: 0;
   background: #dfddddad;
-  padding: 0;
+  padding: 8px;
   color: var(--muted);
   font-size: 13px;
   box-shadow: none;
@@ -522,19 +528,57 @@ input:focus {
 
 .actions {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) repeat(7, auto);
   gap: 12px;
+}
+
+.action-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+}
+
+.action-row-commit input {
+  flex: 1 1 360px;
+}
+
+.action-row-secondary {
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.action-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
   align-items: center;
 }
 
+.action-group-snapshot {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-soft) 78%, var(--surface));
+}
+
+.action-group-snapshot button {
+  min-width: 132px;
+}
+
+.actions button {
+  min-height: 36px;
+}
+
 .actions input {
+  min-width: 0;
   height: 36px;
   padding: 0 12px;
 }
 
 .repo-message {
   min-height: 18px;
-  margin: 10px 0 0;
+  margin: 4px 0 0;
   color: var(--muted);
   font-size: 12px;
   overflow-wrap: anywhere;
@@ -1110,11 +1154,23 @@ input:focus {
   }
 
   .actions {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
   }
 
-  .actions input {
-    grid-column: 1 / -1;
+  .action-row,
+  .action-row-secondary {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .action-group,
+  .action-group-snapshot {
+    width: 100%;
+  }
+
+  .action-group button,
+  .action-group-snapshot button {
+    flex: 1 1 140px;
   }
 
   .preview-body {
@@ -1190,7 +1246,9 @@ input:focus {
 }
 
 @media (max-width: 540px) {
-  .actions {
+  .action-group,
+  .action-group-snapshot {
+    display: grid;
     grid-template-columns: 1fr;
   }
 }
