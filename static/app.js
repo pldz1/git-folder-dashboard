@@ -19,6 +19,10 @@ const state = {
   nonGitDirs: [],
   busy: false,
   selecting: false,
+  snapshotTransfer: {
+    repoId: null,
+    action: "",
+  },
   language: localStorage.getItem(STORAGE_KEYS.language) || DEFAULT_LANGUAGE,
   activeRepoId: localStorage.getItem(STORAGE_KEYS.activeRepoId) || null,
   activeTab: localStorage.getItem(STORAGE_KEYS.activeTab) || "dashboard",
@@ -46,6 +50,8 @@ const sidebarRepoList = document.getElementById("sidebarRepoList");
 const repoDetail = document.getElementById("repoDetail");
 const nonGitList = document.getElementById("nonGitList");
 const errorBox = document.getElementById("errorBox");
+const globalLoading = document.getElementById("globalLoading");
+const globalLoadingText = document.getElementById("globalLoadingText");
 const themeButton = document.getElementById("themeButton");
 const languageButton = document.getElementById("languageButton");
 const importSnapshotInput = document.getElementById("importSnapshotInput");
@@ -97,6 +103,14 @@ function setBusy(isBusy, repoId = null) {
 
 function setSelecting(isSelecting) {
   state.selecting = isSelecting;
+  render();
+}
+
+function setSnapshotTransfer(repoId = null, action = "") {
+  state.snapshotTransfer = {
+    repoId,
+    action,
+  };
   render();
 }
 
@@ -507,7 +521,7 @@ async function exportRepoState(repoId) {
   }
 
   showError("");
-  setBusy(true, repoId);
+  setSnapshotTransfer(repoId, "export");
   try {
     await downloadFile(
       `/api/repos/${repoId}/export-state`,
@@ -516,7 +530,7 @@ async function exportRepoState(repoId) {
   } catch (error) {
     showError(error.message);
   } finally {
-    setBusy(false, repoId);
+    setSnapshotTransfer();
   }
 }
 
@@ -544,7 +558,7 @@ async function importRepoState(repoId, file) {
   formData.append("snapshot", file);
 
   showError("");
-  setBusy(true, repoId);
+  setSnapshotTransfer(repoId, "import");
   try {
     const response = await fetch(withBasePath(`/api/repos/${repoId}/import-state`), {
       method: "POST",
@@ -561,7 +575,7 @@ async function importRepoState(repoId, file) {
   } catch (error) {
     showError(error.message);
   } finally {
-    setBusy(false, repoId);
+    setSnapshotTransfer();
   }
 }
 
@@ -609,6 +623,14 @@ function render() {
     "aria-pressed",
     state.theme === "dark" ? "true" : "false"
   );
+  if (globalLoading && globalLoadingText) {
+    const visible = Boolean(state.snapshotTransfer.action);
+    globalLoading.hidden = !visible;
+    globalLoadingText.textContent =
+      state.snapshotTransfer.action === "import"
+        ? t("loading.importState")
+        : t("loading.exportState");
+  }
 
   renderTabs();
   renderSidebar();
@@ -690,7 +712,10 @@ function renderRepoDetail() {
   }
 
   const isBusy = state.busy && state.activeRepoId === repo.id;
+  const isSnapshotBusy = state.snapshotTransfer.repoId === repo.id;
+  const snapshotAction = state.snapshotTransfer.action;
   const anyBusy = state.busy || state.selecting;
+  const repoBusy = anyBusy || isSnapshotBusy;
   const localBranches = repo.local_branches || [];
   const remoteBranches = repo.remote_branches || [];
   const stagedFiles = normalizeFileEntries(repo.staged_files, "staged");
@@ -716,45 +741,51 @@ function renderRepoDetail() {
       </div>
       <div class="actions">
         <div class="action-row action-row-commit">
-          <input data-commit-input="${
-            repo.id
-          }" type="text" placeholder="${escapeHtml(
+        <input data-commit-input="${
+          repo.id
+        }" type="text" placeholder="${escapeHtml(
     t("repo.commitPlaceholder")
-  )}" ${anyBusy ? "disabled" : ""}>
+  )}" ${repoBusy ? "disabled" : ""}>
           <button class="primary" type="button" data-action="commit" data-repo-id="${
             repo.id
-          }" ${anyBusy ? "disabled" : ""}>${escapeHtml(t("repo.commit"))}</button>
+          }" ${repoBusy ? "disabled" : ""}>${escapeHtml(t("repo.commit"))}</button>
         </div>
         <div class="action-row action-row-secondary">
           <div class="action-group">
             <button type="button" data-action="push" data-repo-id="${repo.id}" ${
-    anyBusy ? "disabled" : ""
+    repoBusy ? "disabled" : ""
   }>${escapeHtml(t("repo.push"))}</button>
             <button type="button" data-action="pull" data-repo-id="${repo.id}" ${
-    anyBusy ? "disabled" : ""
+    repoBusy ? "disabled" : ""
   }>${escapeHtml(t("repo.pull"))}</button>
             <button type="button" data-action="fetch" data-repo-id="${repo.id}" ${
-    anyBusy ? "disabled" : ""
+    repoBusy ? "disabled" : ""
   }>${escapeHtml(t("repo.fetch"))}</button>
             <button type="button" data-action="open" data-repo-id="${repo.id}" ${
-    anyBusy ? "disabled" : ""
+    repoBusy ? "disabled" : ""
   }>${escapeHtml(t("repo.open"))}</button>
             <button type="button" data-action="refresh" data-repo-id="${repo.id}" ${
-    anyBusy ? "disabled" : ""
+    repoBusy ? "disabled" : ""
   }>${escapeHtml(t("repo.refresh"))}</button>
           </div>
           <div class="action-group action-group-snapshot">
             <button type="button" data-action="export-state" data-repo-id="${repo.id}" ${
-    anyBusy ? "disabled" : ""
+    repoBusy ? "disabled" : ""
   }>${escapeHtml(t("repo.exportState"))}</button>
             <button type="button" data-action="import-state" data-repo-id="${repo.id}" ${
-    anyBusy ? "disabled" : ""
+    repoBusy ? "disabled" : ""
   }>${escapeHtml(t("repo.importState"))}</button>
           </div>
         </div>
       </div>
       ${
-        isBusy
+        isSnapshotBusy
+          ? `<p class="repo-message">${escapeHtml(
+              snapshotAction === "import"
+                ? t("repo.importingState")
+                : t("repo.exportingState")
+            )}</p>`
+          : isBusy
           ? `<p class="repo-message">${escapeHtml(t("repo.processing"))}</p>`
           : `<p class="repo-message">${escapeHtml(repo.message || "")}</p>`
       }
@@ -768,14 +799,14 @@ function renderRepoDetail() {
           localBranches,
           repo.branch,
           repo.id,
-          anyBusy
+          repoBusy
         )}
         ${branchBlock(
           t("branch.remote"),
           remoteBranches,
           repo.branch,
           repo.id,
-          anyBusy
+          repoBusy
         )}
       </div>
     </section>
@@ -793,7 +824,7 @@ function renderRepoDetail() {
             title: t("scope.staged"),
             scope: "staged",
             files: stagedFiles,
-            anyBusy,
+            anyBusy: repoBusy,
             headerActions: [
               {
                 label: t("files.unstageAll"),
@@ -807,7 +838,7 @@ function renderRepoDetail() {
             title: t("scope.unstaged"),
             scope: "unstaged",
             files: unstagedFiles,
-            anyBusy,
+            anyBusy: repoBusy,
             headerActions: [
               {
                 label: t("files.stageAll"),
@@ -826,7 +857,7 @@ function renderRepoDetail() {
             title: t("scope.untracked"),
             scope: "untracked",
             files: untrackedFiles,
-            anyBusy,
+            anyBusy: repoBusy,
             headerActions: [
               { label: t("files.addAll"), action: "add_all", danger: false },
               {
@@ -927,16 +958,21 @@ function fileListCard({
 
   return `
     <section class="file-card ${isExpanded ? "expanded" : "collapsed"}">
-      <div class="file-card-header" data-section-toggle="${scope}" aria-expanded="${
-    isExpanded ? "true" : "false"
-  }">
-        <div class="file-card-summary">
+      <div class="file-card-header">
+        <button
+          class="file-card-toggle-hit"
+          type="button"
+          data-section-toggle="${scope}"
+          aria-expanded="${isExpanded ? "true" : "false"}"
+        >
+          <div class="file-card-summary">
           <span class="file-card-label">${escapeHtml(title)}</span>
           <strong class="file-card-count">${files.length}</strong>
-        </div>
+          </div>
+          <span class="file-card-toggle">${isExpanded ? "▾" : "▸"}</span>
+        </button>
         <div class="file-card-header-right">
           <div class="file-card-actions">${headerButtons}</div>
-          <span class="file-card-toggle">${isExpanded ? "▾" : "▸"}</span>
         </div>
       </div>
       ${isExpanded ? `<div class="file-row-list">${content}</div>` : ""}

@@ -110,6 +110,53 @@ input:focus {
   display: none !important;
 }
 
+.global-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  background: rgba(15, 23, 42, 0.26);
+  backdrop-filter: blur(3px);
+}
+
+.global-loading-card {
+  min-width: 220px;
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 22px 24px;
+}
+
+.global-loading-spinner {
+  width: 34px;
+  height: 34px;
+  border: 3px solid color-mix(in srgb, var(--accent) 18%, var(--line));
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.global-loading-card p {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .app-layout {
   display: grid;
   grid-template-columns: 72px 310px minmax(0, 1fr);
@@ -630,7 +677,27 @@ input:focus {
   border-bottom: 1px solid var(--line);
   background: color-mix(in srgb, var(--surface-soft) 72%, var(--surface));
   padding: 11px 14px;
-  cursor: pointer;
+}
+
+.file-card-toggle-hit {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex: 1 1 auto;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+}
+
+.file-card-toggle-hit:hover:not(:disabled),
+.file-card-toggle-hit:focus-visible {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
 }
 
 .file-card-summary {
@@ -686,6 +753,7 @@ input:focus {
   display: inline-grid;
   place-items: center;
   font-size: 13px;
+  color: var(--muted);
 }
 
 .file-row-list {
